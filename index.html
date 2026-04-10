@@ -614,38 +614,61 @@ function applyTpl(t){
 // ── SUBMIT ────────────────────────────────────────────────
 async function submitArticle(){
   if(!USER){openLogin();return;}
+
   const title=(document.getElementById('w-title').value||'').trim();
   const html=document.getElementById('editor').innerHTML.trim();
   const cat=document.getElementById('w-cat').value;
   const seoT=(document.getElementById('w-seo-t').value||'').trim();
   const seoD=(document.getElementById('w-seo-d').value||'').trim();
+
   if(!title){toast('Add a title first.');return;}
   if(!cat){toast('Select a category.');return;}
   if((document.getElementById('editor').innerText||'').trim().length<20){toast('Article is too short.');return;}
+
   const wc=wordCount();
-  if(wc>1000){toast(`Over limit — ${wc}/1000 words. Please trim.`);return;}
-  const ws=getWeekStart();
-  const weekly=ARTS.filter(a=>a.author.email===USER.email&&a.createdAt>=ws&&!a.isAdmin).length;
-  if(weekly>=2){toast('2 articles/week limit reached. Try next week.');return;}
+  if(wc>1000){toast(`Over limit — ${wc}/1000 words.`);return;}
+
   const coverEl=document.getElementById('cover-prev');
   const cover=coverEl.style.display!=='none'?coverEl.src:null;
-  const excerpt=(document.getElementById('editor').innerText||'').trim().slice(0,190)+'…';
-  const art={
-    id:'a_'+Date.now()+'_'+Math.random().toString(36).slice(2,7),
-    title,content:html,excerpt,category:cat,
-    author:{name:USER.name,email:USER.email,initials:USER.initials},
-    status:'pending',createdAt:Date.now(),publishedAt:null,
-    coverImage:cover,readTime:Math.max(1,Math.ceil(wc/200)),
-    seoTitle:seoT||title,seoDesc:seoD||excerpt,isAdmin:false
-  };
-  ARTS.unshift(art);
-  await put('iw_arts',ARTS);
-  if(DRAFTS[USER.email]){delete DRAFTS[USER.email];await put('iw_drafts',DRAFTS);}
-  document.getElementById('w-title').value='';
-  document.getElementById('editor').innerHTML='';
-  document.getElementById('cover-prev').style.display='none';
-  toast('✅ Submitted for review! You\'ll be published once approved.');
-  showView('home');renderArticles();
+
+  try {
+    const res = await fetch("http://localhost:3000/api/articles", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        title,
+        content: html,
+        category: cat,
+        seoTitle: seoT,
+        seoDesc: seoD,
+        coverImage: cover,
+        authorName: USER.name,
+        authorEmail: USER.email
+      })
+    });
+
+    const data = await res.json();
+
+    if(res.ok){
+      toast("✅ Article submitted to server!");
+
+      document.getElementById('w-title').value='';
+      document.getElementById('editor').innerHTML='';
+      document.getElementById('cover-prev').style.display='none';
+
+      showView('home');
+
+    } else {
+      toast("❌ Failed to save article");
+      console.error(data);
+    }
+
+  } catch(err){
+    console.error(err);
+    toast("⚠️ Backend not running (start npm run dev)");
+  }
 }
 
 async function saveDraft(){
