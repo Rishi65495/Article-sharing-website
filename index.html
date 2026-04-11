@@ -463,17 +463,23 @@ const TPLS = {
   review: { title:'[Title] — A Review', html:'<h2>At a Glance</h2><p>One paragraph summary and your overall verdict.</p><h2>What Works</h2><p>The strengths — be specific.</p><h2>What Doesn\'t</h2><p>The weaknesses — be fair.</p><h2>The Verdict</h2><p>Who should read/watch/use this?</p>' }
 };
 
-// ── INIT ──────────────────────────────────────────
+// ── INIT ─────────────async─────────────────────────────
 async function init() {
-  // Handle OAuth redirect
-  const { data: { session } } = await db.auth.getSession();
-  SESS = session;
-  if (SESS) await loadUserRow();
-  updateNavUI();
+  // STEP 1: Get session (after OAuth redirect)
+  const { data, error } = await db.auth.getSession();
 
-  // Listen for auth state changes
+  if (error) {
+    console.log('Session error:', error);
+  }
+
+  SESS = data.session;
+
+  // STEP 2: Listen for auth state changes
   db.auth.onAuthStateChange(async (event, session) => {
+    console.log('Auth event:', event);
+
     SESS = session;
+
     if (session) {
       await loadUserRow();
       closeModal('login-modal');
@@ -481,14 +487,24 @@ async function init() {
     } else {
       USER_ROW = null;
     }
+
     updateNavUI();
   });
 
+  // STEP 3: If session already exists, load user
+  if (SESS) {
+    await loadUserRow();
+  }
+
+  updateNavUI();
+
+  // STEP 4: Load data
   await fetchAdminPin();
   await fetchArticles();
+
+  // STEP 5: UI finish
   document.getElementById('loading-screen').classList.add('hidden');
-  document.getElementById('nav-auth').style.display = 'inline-flex';
-  if (SESS) document.getElementById('nav-auth').style.display = 'none';
+  document.getElementById('nav-auth').style.display = SESS ? 'none' : 'inline-flex';
 }
 
 async function loadUserRow() {
