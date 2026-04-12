@@ -643,8 +643,12 @@ function animateCount(el,target){
 
 function renderFeatured(){
   const wrap=document.getElementById('featured-wrap');
-  if(!wrap||!ARTS.length) return;
-  const a=ARTS[0];
+  if(!wrap) return;
+  // Show featured from current category (or global if 'all')
+  let pool=[...ARTS];
+  if(ACTIVE_CAT&&ACTIVE_CAT!=='all') pool=pool.filter(a=>a.category===ACTIVE_CAT);
+  if(!pool.length){wrap.innerHTML='';return;}
+  const a=pool[0];
   const em=CATS[a.category]||'📄';
   const fmt=new Date(a.published_at||a.created_at).toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'});
   const img=a.cover_url?`<img src="${a.cover_url}" class="fs-cover" alt="" loading="lazy">`:`<div class="fs-cover-icon">${em}</div>`;
@@ -653,7 +657,7 @@ function renderFeatured(){
       <div class="fs-cat">${em} ${esc(a.category)}</div>
       <div class="fs-title">${esc(a.title)}</div>
       <div class="fs-excerpt">${esc(a.excerpt||'')}</div>
-      <div class="fs-meta">By ${esc(a.author_name||'Unknown')} &bull; ${fmt} &bull; ${a.read_time} min read</div>
+      <div class="fs-meta">By <strong style="color:rgba(255,255,255,.75)">${esc(a.author_name||'Unknown')}</strong> &bull; ${fmt} &bull; ${a.read_time} min read</div>
     </div>
     ${img}
   </div>`;
@@ -734,25 +738,48 @@ function showView(v){
 }
 
 // ─── ARTICLES ─────────────────────────────
-function setCat(btn,cat){document.querySelectorAll('.cat-btn').forEach(b=>b.classList.remove('on'));btn.classList.add('on');ACTIVE_CAT=cat;renderArticles();}
+function setCat(btn,cat){
+  document.querySelectorAll('.cat-btn').forEach(b=>b.classList.remove('on'));
+  btn.classList.add('on');
+  ACTIVE_CAT=cat;
+  renderFeatured(); // update featured strip for selected category
+  renderArticles();
+}
 
 function renderArticles(){
   const grid=document.getElementById('art-grid');
   const q=(document.getElementById('search-inp')?.value||'').toLowerCase();
+  // ALWAYS start from full list, apply filters first, then skip featured
   let list=[...ARTS];
-  // Skip index 0 — shown as featured
-  if(list.length>1) list=list.slice(1);
   if(ACTIVE_CAT!=='all') list=list.filter(a=>a.category===ACTIVE_CAT);
-  if(q) list=list.filter(a=>a.title.toLowerCase().includes(q)||(a.excerpt||'').toLowerCase().includes(q)||(a.author_name||'').toLowerCase().includes(q));
-  // Update count
+  if(q) list=list.filter(a=>
+    a.title.toLowerCase().includes(q)||
+    (a.excerpt||'').toLowerCase().includes(q)||
+    (a.author_name||'').toLowerCase().includes(q)||
+    (a.category||'').toLowerCase().includes(q)
+  );
+  // Update count badge
   const ac=document.getElementById('art-count');
-  if(ac&&!q&&ACTIVE_CAT==='all') ac.textContent=`${ARTS.length} article${ARTS.length===1?'':'s'}`;
-  if(!list.length){grid.innerHTML='<div class="empty"><div class="empty-icon">✍️</div><h3>No articles here yet</h3><p>Be the first to write something wonderful.</p></div>';return;}
+  if(ac) ac.textContent=`${list.length} article${list.length===1?'':'s'}${ACTIVE_CAT!=='all'?' in '+ACTIVE_CAT:q?' found':''}`;
+  // Skip index 0 only when showing ALL (no filter, no search) — it's the featured strip
+  const isFiltered=ACTIVE_CAT!=='all'||q;
+  if(!isFiltered&&list.length>1) list=list.slice(1);
+  if(!list.length){
+    const catIcon=CATS[ACTIVE_CAT]||'📚';
+    grid.innerHTML=`<div class="empty">
+      <div class="empty-icon">${q?'🔍':ACTIVE_CAT!=='all'?catIcon:'✍️'}</div>
+      <h3>${q?`No results for "${q}"`:ACTIVE_CAT!=='all'?`No ${ACTIVE_CAT} articles yet`:'No articles yet'}</h3>
+      <p>${q?'Try a different search term.':ACTIVE_CAT!=='all'?`Be the first to write a ${ACTIVE_CAT} article!`:'Be the first to write something wonderful.'}</p>
+    </div>`;
+    return;
+  }
   const fmt=ts=>new Date(ts).toLocaleDateString('en-IN',{month:'short',day:'numeric',year:'numeric'});
   const liked=JSON.parse(localStorage.getItem('iw_liked')||'{}');
   grid.innerHTML=list.map((a,i)=>{
     const em=CATS[a.category]||'📄';
-    const cov=a.cover_url?`<img src="${a.cover_url}" alt="" loading="lazy">`:`<div style="font-size:2.4rem">${em}</div>`;
+    const cov=a.cover_url
+      ?`<img src="${a.cover_url}" alt="" loading="lazy">`
+      :`<div style="font-size:2.4rem;line-height:1">${em}</div>`;
     const isLiked=!!liked[a.id];
     return `<div class="card" style="animation-delay:${i*.05}s" onclick="openArt('${a.id}')">
       <div class="card-cover">${cov}</div>
@@ -761,10 +788,15 @@ function renderArticles(){
         <div class="card-title">${esc(a.title)}</div>
         <div class="card-excerpt">${esc(a.excerpt||'')}</div>
         <div class="card-foot">
-          <div class="card-author"><div class="mini-av">${esc(a.author_initials||'?')}</div><span>${esc(a.author_name||'')}</span></div>
+          <div class="card-author">
+            <div class="mini-av">${esc((a.author_initials||'?').slice(0,2))}</div>
+            <span title="${esc(a.author_name||'')}"><strong>${esc(a.author_name||'Anonymous')}</strong></span>
+          </div>
           <div style="display:flex;align-items:center;gap:8px">
             <span>${a.read_time}m · ${fmt(a.published_at||a.created_at)}</span>
-            <button class="like-btn${isLiked?' liked':''}" onclick="toggleLike(event,'${a.id}')" title="Like"><span class="like-heart">♥️</span> <span id="lc-${a.id}">${(a.likes||0)}</span></button>
+            <button class="like-btn${isLiked?' liked':''}" onclick="toggleLike(event,'${a.id}')" title="Like">
+              <span class="like-heart">♥️</span> <span id="lc-${a.id}">${a.likes||0}</span>
+            </button>
           </div>
         </div>
       </div>
@@ -799,20 +831,51 @@ async function openArt(id){
   const em=CATS[art.category]||'📄';
   const dt=new Date(art.published_at||art.created_at).toLocaleDateString('en-IN',{day:'numeric',month:'long',year:'numeric'});
   const cov=art.cover_url?`<img src="${art.cover_url}" alt="" class="art-cover">`:'';
+  // Only the original writer sees Edit — everyone else reads, likes & comments
   const isOwner=SESS&&USER_ROW&&USER_ROW.id===art.author_id;
-  const editBtn=isOwner?`<button onclick="editArticle('${art.id}')" style="padding:6px 14px;background:var(--amber-pale);border:1px solid var(--amber-light);border-radius:5px;font-family:var(--font-body);font-size:.8rem;color:var(--amber)">✏️ Edit</button>`:'';
+  const editBtn=isOwner
+    ?`<button onclick="editArticle('${art.id}')" style="padding:6px 16px;background:var(--amber-pale);border:1px solid var(--amber-light);border-radius:5px;font-family:var(--font-body);font-size:.8rem;color:var(--amber);display:inline-flex;align-items:center;gap:5px">✏️ Edit My Article</button>`
+    :'';
   const {data:cmts}=await db.from('comments').select('*').eq('article_id',id).order('created_at',{ascending:true});
-  const cmtHtml=(cmts||[]).map(c=>`<div class="cmt-item"><div class="cmt-av">${esc(c.author_initials||'?')}</div><div><div class="cmt-author">${esc(c.author_name)}</div><div class="cmt-text">${esc(c.content)}</div><div class="cmt-time">${new Date(c.created_at).toLocaleDateString('en-IN',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'})}</div></div></div>`).join('');
-  const cmtInput=SESS?`<div class="cmt-input-row"><textarea class="cmt-ta" id="cmt-in" rows="2" placeholder="Share your thoughts…"></textarea><button class="btn-cmt" onclick="postCmt('${id}')">Post</button></div>`:`<div class="alert alert-i" style="margin-bottom:16px">💬 <a onclick="openLogin()" style="color:var(--amber);cursor:pointer;font-weight:600">Sign in</a> to leave a comment.</div>`;
+  const cmtHtml=(cmts||[]).map(c=>`
+    <div class="cmt-item">
+      <div class="cmt-av">${esc((c.author_initials||'?').slice(0,2))}</div>
+      <div>
+        <div class="cmt-author">${esc(c.author_name)}</div>
+        <div class="cmt-text">${esc(c.content)}</div>
+        <div class="cmt-time">${new Date(c.created_at).toLocaleDateString('en-IN',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'})}</div>
+      </div>
+    </div>`).join('');
+  const cmtInput=SESS
+    ?`<div class="cmt-input-row">
+        <textarea class="cmt-ta" id="cmt-in" rows="2" placeholder="Share your thoughts…"></textarea>
+        <button class="btn-cmt" onclick="postCmt('${id}')">Post</button>
+      </div>`
+    :`<div class="alert alert-i" style="margin-bottom:16px">
+        💬 <a onclick="openLogin()" style="color:var(--amber);cursor:pointer;font-weight:600">Sign in</a> to comment — reading &amp; liking is free for everyone.
+      </div>`;
+  // Like button on article page — everyone can use it
+  const liked=JSON.parse(localStorage.getItem('iw_liked')||'{}');
+  const isLiked=!!liked[id];
+  const artLikeBtn=`<button class="like-btn${isLiked?' liked':''}" id="art-like-btn" onclick="toggleArtLike('${id}')">
+    <span class="like-heart">♥️</span> <span id="art-lc">${art.likes||0}</span> Likes
+  </button>`;
   document.getElementById('view-article').innerHTML=`
     <button class="back-btn" onclick="goBack()">← Back to articles</button>
-    <div class="art-cat-badge">${em} ${esc(art.category)}</div>
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap">
+      <span class="art-cat-badge">${em} ${esc(art.category)}</span>
+      ${editBtn}
+    </div>
     <h1 class="art-title">${esc(art.title)}</h1>
     <div class="art-meta">
-      <div style="display:flex;align-items:center;gap:10px">
-        <div class="art-av">${esc(art.author_initials||'?')}</div>
-        <div><div style="font-weight:600;color:var(--ink)">${esc(art.author_name||'')}</div><div>${dt} · ${art.read_time} min read</div></div>
-      </div>${editBtn}
+      <div style="display:flex;align-items:center;gap:10px;flex:1">
+        <div class="art-av">${esc((art.author_initials||'?').slice(0,2))}</div>
+        <div>
+          <div style="font-weight:700;color:var(--ink)">${esc(art.author_name||'Anonymous')}</div>
+          <div style="font-size:.82rem;color:var(--ink-muted)">${dt} &bull; ${art.read_time} min read</div>
+        </div>
+      </div>
+      ${artLikeBtn}
     </div>
     ${cov}
     <div class="art-body">${art.content}</div>
@@ -822,6 +885,23 @@ async function openArt(id){
       <div id="cmt-list">${cmtHtml||'<p style="color:var(--ink-muted);font-size:.88rem">No comments yet. Be the first!</p>'}</div>
     </div>`;
   showView('article');
+}
+
+function toggleArtLike(id){
+  const liked=JSON.parse(localStorage.getItem('iw_liked')||'{}');
+  const btn=document.getElementById('art-like-btn');
+  const countEl=document.getElementById('art-lc');
+  let cur=parseInt(countEl?.textContent||'0',10);
+  if(liked[id]){
+    delete liked[id];
+    btn?.classList.remove('liked');
+    if(countEl) countEl.textContent=Math.max(0,cur-1);
+  } else {
+    liked[id]=1;
+    btn?.classList.add('liked');
+    if(countEl) countEl.textContent=cur+1;
+  }
+  localStorage.setItem('iw_liked',JSON.stringify(liked));
 }
 
 function goBack(){document.title='Inkwell — Where Words Find Home';showView('home');}
