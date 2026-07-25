@@ -789,6 +789,44 @@ footer::before{content:'';position:absolute;inset:0;background:radial-gradient(e
   color: #4a443e !important;
 }
 
+/* ── FORCE READABLE TEXT INSIDE TEXTURED PANELS ──
+   .art-body has its own explicit `color: var(--fg2)` rule, which wins over
+   the inherited color set on the parent .paper-X container regardless of
+   !important. These rules target .art-body directly so paragraph/list text
+   always has real contrast against each texture's background. */
+.paper-wood .art-body,
+.paper-wood .art-body p,
+.paper-wood .art-body li,
+.paper-wood .art-body span { color: #f1e3d0 !important; }
+.paper-wood .art-body strong, .paper-wood .art-body b { color: #ffffff !important; }
+
+.paper-paper .art-body,
+.paper-paper .art-body p,
+.paper-paper .art-body li,
+.paper-paper .art-body span { color: #24211c !important; }
+.paper-paper .art-body strong, .paper-paper .art-body b { color: #000000 !important; }
+
+.paper-parchment .art-body,
+.paper-parchment .art-body p,
+.paper-parchment .art-body li,
+.paper-parchment .art-body span { color: #3d2f18 !important; }
+.paper-parchment .art-body strong, .paper-parchment .art-body b { color: #5c3b12 !important; }
+
+.paper-linen .art-body,
+.paper-linen .art-body p,
+.paper-linen .art-body li,
+.paper-linen .art-body span { color: #302a22 !important; }
+.paper-linen .art-body strong, .paper-linen .art-body b { color: #1a1612 !important; }
+
+/* Slightly more refined, book-like presentation */
+.art-body-container.paper-wood,
+.art-body-container.paper-paper,
+.art-body-container.paper-parchment,
+.art-body-container.paper-linen {
+  border-radius: 18px;
+  transition: all .45s cubic-bezier(.16,1,.3,1);
+}
+
 /* ════════════════════════════════════════════════════════════════════
    MULTI-INTERFACE DESIGN SYSTEM
    Strategy: Override CSS variables at body level so ALL components
