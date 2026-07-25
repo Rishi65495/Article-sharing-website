@@ -1234,9 +1234,9 @@ body.mode-modern .vw.on { padding-bottom: 96px !important; }
   
   <div style="display:flex;align-items:center;gap:12px">
     <select class="tb mode-selector-nav" onchange="changeInterfaceMode(this.value)" style="padding:6px 12px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:999px;color:#f3f3f3;cursor:pointer;outline:none;font-weight:600;font-size:0.8rem">
-      <option value="default">✨ Default Mode</option>
-      <option value="professional">👔 Editorial Pro</option>
       <option value="modern">🌌 Aura Minimalist</option>
+      <option value="professional">👔 Editorial Pro</option>
+      <option value="default">📜 Classic Mode</option>
     </select>
   </div>
 </header>
@@ -1265,9 +1265,9 @@ body.mode-modern .vw.on { padding-bottom: 96px !important; }
     <button class="nb desk" onclick="showView('home'); setCat(document.querySelector('.cat'),'foryou')">For You</button>
     
     <select id="interface-mode-select" class="tb desk" onchange="changeInterfaceMode(this.value)" style="padding:6px 12px;background:var(--glass2);border:1px solid var(--border2);border-radius:999px;color:var(--fg2);cursor:pointer;outline:none;font-weight:600;font-size:0.8rem;margin:0 4px">
-      <option value="default">✨ Default Mode</option>
-      <option value="professional">👔 Editorial Pro</option>
       <option value="modern">🌌 Aura Minimalist</option>
+      <option value="professional">👔 Editorial Pro</option>
+      <option value="default">📜 Classic Mode</option>
     </select>
 
     <span id="nav-auth" class="desk" style="display:inline-flex;gap:8px">
@@ -1302,9 +1302,9 @@ body.mode-modern .vw.on { padding-bottom: 96px !important; }
   <div class="d-sep"></div>
   <div class="d-label">Interface Style</div>
   <select id="interface-mode-select-drawer" class="tb" onchange="changeInterfaceMode(this.value)" style="margin:6px 14px 14px;width:calc(100% - 28px);background:var(--glass2);border:1px solid var(--border2);color:var(--fg2);font-weight:600">
-    <option value="default">✨ Default Mode</option>
-    <option value="professional">👔 Editorial Pro</option>
     <option value="modern">🌌 Aura Minimalist</option>
+    <option value="professional">👔 Editorial Pro</option>
+    <option value="default">📜 Classic Mode</option>
   </select>
 
   <div class="d-sep"></div>
@@ -1748,7 +1748,7 @@ const SUPABASE_ANON_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYm
 const{createClient}=supabase;
 const db=createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
 
-const DEFAULT_INTERFACE_MODE='default';
+const DEFAULT_INTERFACE_MODE='modern';
 let SESS=null,USER_ROW=null,ARTS=[],ACTIVE_CAT='all',ADMIN_AUTH=false,ATAB='pending',ADMIN_PIN='123456',COVER_FILE=null,COVER_URL=null,EDIT_ID=null,AUTH_MODE='login',ADMIN_NAME='Rishabh Gupta';
 const ADMIN_EMAIL='rgupta65495@gmail.com';
 let isFirstLogin=false,FOLLOWING=[],AVATARS={},BOOKMARKS={};
@@ -2151,7 +2151,11 @@ async function toggleLike(e,id){
   else{liked[id]=1;btn.classList.add('liked');if(c)c.textContent=n+1}
   if(SESS){await db.auth.updateUser({data:{liked_articles:liked}});SESS.user.user_metadata=SESS.user.user_metadata||{};SESS.user.user_metadata.liked_articles=liked;}
   else localStorage.setItem('iw_liked',JSON.stringify(liked));
-  try{db.from('articles').select('likes').eq('id',id).single().then(({data})=>{if(data)db.from('articles').update({likes:Math.max(0,(data.likes||0)+change)}).eq('id',id)})}catch(err){}
+  try{
+    const{error}=await db.rpc('increment_article_likes',{aid:id,delta:change});
+    if(error)console.error('Like sync failed:',error);
+    else{const idx=ARTS.findIndex(x=>x.id===id);if(idx>-1)ARTS[idx].likes=Math.max(0,(ARTS[idx].likes||0)+change);}
+  }catch(err){console.error('Like sync failed:',err)}
 }
 
 /* ── EXPLORE ── */
@@ -2331,7 +2335,7 @@ async function openArt(id){
         const vKey='iw_v_'+id;
         if(!sessionStorage.getItem(vKey)){
           sessionStorage.setItem(vKey,'1');
-          db.from('articles').select('views').eq('id',id).single().then(({data})=>{if(data)db.from('articles').update({views:(data.views||0)+1}).eq('id',id)});
+          db.rpc('increment_article_views',{aid:id}).then(({error})=>{if(error)console.error('View sync failed:',error);else{const idx=ARTS.findIndex(x=>x.id===id);if(idx>-1)ARTS[idx].views=(ARTS[idx].views||0)+1;art.views=(art.views||0)+1;const vEl=document.querySelector('.art-actions span');}});
         }
       }catch(e){}
     },1000);
@@ -2368,11 +2372,13 @@ async function toggleArtLike(id,authorId){
   if(SESS){await db.auth.updateUser({data:{liked_articles:liked}});SESS.user.user_metadata=SESS.user.user_metadata||{};SESS.user.user_metadata.liked_articles=liked;}
   else localStorage.setItem('iw_liked',JSON.stringify(liked));
   try{
-    db.from('articles').select('likes').eq('id',id).single().then(({data})=>{if(data)db.from('articles').update({likes:Math.max(0,(data.likes||0)+change)}).eq('id',id)});
+    const{error}=await db.rpc('increment_article_likes',{aid:id,delta:change});
+    if(error){console.error('Like sync failed:',error);}
+    else{const idx=ARTS.findIndex(x=>x.id===id);if(idx>-1)ARTS[idx].likes=Math.max(0,(ARTS[idx].likes||0)+change);}
     if(change===1&&SESS&&USER_ROW&&authorId&&authorId!==USER_ROW.id){
       await db.from('user_notifications').insert({user_id:authorId,actor_id:USER_ROW.id,actor_name:USER_ROW.name,actor_avatar:USER_ROW.avatar_url,type:'post_like',message:'Liked your article',link:'?article='+id});
     }
-  }catch(err){}
+  }catch(err){console.error('Like sync failed:',err)}
 }
 
 function toggleArtBookmark(id){
@@ -2431,9 +2437,10 @@ async function toggleCmtLike(id,authorId){
   if(SESS){await db.auth.updateUser({data:{liked_cmts:liked}});SESS.user.user_metadata=SESS.user.user_metadata||{};SESS.user.user_metadata.liked_cmts=liked;}
   else localStorage.setItem('iw_c_liked',JSON.stringify(liked));
   try{
-    db.from('comments').select('likes').eq('id',id).single().then(({data})=>{if(data)db.from('comments').update({likes:Math.max(0,(data.likes||0)+change)}).eq('id',id)});
+    const{error}=await db.rpc('increment_comment_likes',{cid:id,delta:change});
+    if(error)console.error('Comment like sync failed:',error);
     if(change===1&&SESS&&USER_ROW&&authorId&&authorId!==USER_ROW.id){await db.from('user_notifications').insert({user_id:authorId,actor_id:USER_ROW.id,actor_name:USER_ROW.name,actor_avatar:USER_ROW.avatar_url,type:'comment_like',message:'Liked your comment'});}
-  }catch(e){}
+  }catch(e){console.error('Comment like sync failed:',e)}
 }
 
 async function postCmt(artId,parentId=null,parentAuthorId=null){
@@ -2441,7 +2448,7 @@ async function postCmt(artId,parentId=null,parentAuthorId=null){
   const inpId=parentId?'reply-in-'+parentId:'cmt-in';
   const inp=document.getElementById(inpId);const txt=(inp?.value||'').trim();if(!txt)return;
   const{error}=await db.from('comments').insert({article_id:artId,user_id:USER_ROW.id,author_name:USER_ROW.name,author_initials:USER_ROW.initials,content:txt,parent_id:parentId});
-  if(error){toast('Error posting comment.');return}
+  if(error){console.error('Comment insert error:',error);toast('Error: '+(error.message||'Could not post comment.'));return}
   try{
     const targetUser=parentAuthorId||ARTS.find(a=>a.id===artId)?.author_id;
     if(targetUser&&targetUser!==USER_ROW.id){
